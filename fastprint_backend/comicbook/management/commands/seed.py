@@ -32,23 +32,24 @@ class Command(BaseCommand):
 
         # Bindings for Comic Book size
         ComicBindingType.objects.get_or_create(name="Perfect Bound", price=2.50, trim_size=comic, min_pages=32)
-        ComicBindingType.objects.get_or_create(name="Saddle Stitch", price=5.00, trim_size=comic, min_pages=4, max_pages=48)
+        ComicBindingType.objects.get_or_create(name="Saddle Stitch", price=5.00, trim_size=comic, min_pages=4)
         ComicBindingType.objects.get_or_create(name="Case Wrap", price=9.75, trim_size=comic, min_pages=24)
         ComicBindingType.objects.get_or_create(name="Linen Wrap", price=13.80, trim_size=comic, min_pages=32)
-        ComicBindingType.objects.get_or_create(name="Coil Bound", price=6.18, trim_size=comic, min_pages=3, max_pages=470)
+        ComicBindingType.objects.get_or_create(name="Coil Bound", price=6.18, trim_size=comic, min_pages=3)
 
         # Bindings for Larger Deluxe size
         ComicBindingType.objects.get_or_create(name="Perfect Bound", price=3.00, trim_size=deluxe, min_pages=32)
-        ComicBindingType.objects.get_or_create(name="Saddle Stitch", price=5.00, trim_size=deluxe, min_pages=4, max_pages=48)
+        ComicBindingType.objects.get_or_create(name="Saddle Stitch", price=5.00, trim_size=deluxe, min_pages=4)
         ComicBindingType.objects.get_or_create(name="Case Wrap", price=9.75, trim_size=deluxe, min_pages=24)
         ComicBindingType.objects.get_or_create(name="Linen Wrap", price=13.80, trim_size=deluxe, min_pages=32)
-        ComicBindingType.objects.get_or_create(name="Coil Bound", price=6.18, trim_size=deluxe, min_pages=3, max_pages=470)
+        ComicBindingType.objects.get_or_create(name="Coil Bound", price=6.18, trim_size=deluxe, min_pages=3)
 
         # Bindings for Manga size
         ComicBindingType.objects.get_or_create(name="Perfect Bound", price=2.50, trim_size=manga, min_pages=32)
-        ComicBindingType.objects.get_or_create(name="Saddle Stitch", price=5.00, trim_size=manga, min_pages=4, max_pages=48)
+        ComicBindingType.objects.get_or_create(name="Saddle Stitch", price=5.00, trim_size=manga, min_pages=4)
         ComicBindingType.objects.get_or_create(name="Case Wrap", price=9.75, trim_size=manga, min_pages=24)
         ComicBindingType.objects.get_or_create(name="Linen Wrap", price=13.80, trim_size=manga, min_pages=32)
-        ComicBindingType.objects.get_or_create(name="Coil Bound", price=6.18, trim_size=manga, min_pages=3, max_pages=470)
+        ComicBindingType.objects.get_or_create(name="Coil Bound", price=6.18, trim_size=manga, min_pages=3)
 
         self.stdout.write(self.style.SUCCESS("✅ Comic Book sample data seeded."))
+

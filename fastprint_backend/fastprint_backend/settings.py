@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 from datetime import timedelta
 
@@ -41,7 +42,9 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',  # CORS support for frontend
     'users',
-   
+    'rest_framework.authtoken',
+
+
     'orders',
     'book',
     'promos',
@@ -55,16 +58,30 @@ INSTALLED_APPS = [
     'yearbook',
     'calender',
     'payment',
-    'book_shipping'
-    
+    'book_shipping',
+    'userprofiles',
+        'django_filters',
+
+
+
 ]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+
     ),
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
+
+    ],
+      'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+        'rest_framework.filters.SearchFilter',
     ],
 }
 
@@ -77,7 +94,8 @@ SIMPLE_JWT = {
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # CORS middleware (must be at top)
+    # CORS middleware (must be at top)
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -102,13 +120,13 @@ CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only in development
 # CORS_ALLOW_ALL_ORIGINS = True
 
 ROOT_URLCONF = 'fastprint_backend.urls'
-import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],  # ✅ Your custom templates directory
+        # ✅ Your custom templates directory
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -186,7 +204,7 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'ayan3092003@gmail.com'
-EMAIL_HOST_PASSWORD = 'uqcy qpda lxyr zycw' 
+EMAIL_HOST_PASSWORD = 'uqcy qpda lxyr zycw'
 DEFAULT_FROM_EMAIL = 'FastPrintGuys <ayan3092003@gmail.com>'
 
 

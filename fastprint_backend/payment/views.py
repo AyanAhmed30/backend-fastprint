@@ -1,11 +1,17 @@
 from rest_framework.response import Response
 from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
 import logging
 import stripe
 import paypalrestsdk
+from .models import PaymentMethodSettings
+from .serializers import PaymentMethodSettingsSerializer
+
+# Import the send_simple_thank_you_email utility function
+from .utils import send_simple_thank_you_email  # Make sure this exists, or define it below
+
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -24,6 +30,14 @@ paypalrestsdk.configure({
 def create_checkout_session(request):
     """POST /api/payment/create-checkout-session/"""
     try:
+        # Check if Stripe is enabled
+        payment_settings = PaymentMethodSettings.load()
+        if not payment_settings.stripe_enabled:
+            return Response(
+                {'error': 'Stripe payments are currently disabled'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         items = request.data.get('items', [])
         
         if not items:
@@ -57,8 +71,8 @@ def create_checkout_session(request):
             payment_method_types=['card'],
             mode='payment',
             line_items=stripe_line_items,
-            success_url='http://localhost:5173/success',
-            cancel_url='http://localhost:5173/cancel',
+            success_url='http://app.fastprintguys.com/success',
+            cancel_url='http://app.fastprintguys.com/cancel',
         )
         
         return Response({
@@ -90,10 +104,18 @@ def create_checkout_session(request):
 def create_paypal_payment(request):
     """POST /api/payment/paypal/create-payment/"""
     try:
+        # Check if PayPal is enabled
+        payment_settings = PaymentMethodSettings.load()
+        if not payment_settings.paypal_enabled:
+            return Response(
+                {'error': 'PayPal payments are currently disabled'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         amount = request.data.get('amount')
         currency = request.data.get('currency', 'USD')
-        return_url = request.data.get('return_url', 'http://localhost:3000/payment/success')
-        cancel_url = request.data.get('cancel_url', 'http://localhost:3000/payment/cancel')
+        return_url = request.data.get('return_url', 'http://app.fastprintguys.com/payment/success')
+        cancel_url = request.data.get('cancel_url', 'http://app.fastprintguys.com/payment/cancel')
 
         # Validate amount
         if not amount:
@@ -281,6 +303,59 @@ def get_paypal_payment_details(request, payment_id):
         )
     except Exception as e:
         logger.error(f"PayPal payment details error: {str(e)}")
+        return Response(
+            {'error': 'Internal server error'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAdminUser])
+def admin_payment_settings(request):
+    """GET/PUT /api/admin/payment-settings/"""
+    settings = PaymentMethodSettings.load()
+    
+    if request.method == 'GET':
+        serializer = PaymentMethodSettingsSerializer(settings)
+        return Response(serializer.data)
+    
+    elif request.method == 'PUT':
+        serializer = PaymentMethodSettingsSerializer(settings, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+def payment_methods_status(request):
+    """GET /api/payment/methods-status/"""
+    settings = PaymentMethodSettings.load()
+    serializer = PaymentMethodSettingsSerializer(settings)
+    return Response(serializer.data)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_thank_you_email(request):
+    """
+    POST /api/payment/send-thank-you-email/
+    Send a thank you email to the authenticated user without user name
+    """
+    try:
+        user = request.user
+        
+        # Call email function without passing user name
+        success = send_simple_thank_you_email(user_email=user.email)
+
+        if success:
+            return Response(
+                {'message': 'Thank you email sent successfully'}, 
+                status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                {'error': 'Failed to send thank you email'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    except Exception as e:
+        logger.error(f"Error sending thank you email: {str(e)}")
         return Response(
             {'error': 'Internal server error'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR

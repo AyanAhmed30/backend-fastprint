@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
+from django.core.mail import send_mail
+from django.conf import settings
 
 from .models import BookProject
 from .serializers import BookProjectSerializer
@@ -21,6 +23,7 @@ class UploadBookProjectView(APIView):
         data = request.data.copy()
         cover_file = request.FILES.get('cover_file')
         cover_description = data.get('cover_description')
+        is_cover_expert = data.get('is_cover_expert', False)
 
         # Must provide either a cover file or a cover description
         if not cover_file and not cover_description:
@@ -33,7 +36,13 @@ class UploadBookProjectView(APIView):
 
         if serializer.is_valid():
             try:
-                serializer.save(user=request.user)
+                # Save the book project
+                book_project = serializer.save(user=request.user)
+                
+                # Send email if this is a cover expert submission
+                if is_cover_expert:
+                    self.send_cover_expert_email(request, book_project)
+                
                 return Response({
                     'status': 'success',
                     'message': 'Book project uploaded successfully.',
@@ -52,7 +61,55 @@ class UploadBookProjectView(APIView):
                 'errors': serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
 
+    def send_cover_expert_email(self, request, book_project):
+        """Send email notification for cover expert requests"""
+        try:
+            subject = 'New Cover Expert Request Submission'
+            
+            # Build email message with project details
+            message = f"""
+            New Cover Expert Request Received:
+            
+            Project Details:
+            - Title: {book_project.title}
+            - Category: {book_project.category}
+            - Language: {book_project.language}
+            - Page Count: {book_project.page_count}
+            - Binding Type: {book_project.binding_type}
+            - Cover Finish: {book_project.cover_finish}
+            - Interior Color: {book_project.interior_color}
+            - Paper Type: {book_project.paper_type}
+            - Trim Size: {book_project.trim_size}
+            
+            Contact Information:
+            - Name: {request.data.get('contact_name', 'Not provided')}
+            - Email: {request.data.get('contact_email', 'Not provided')}
+            - Book Title: {request.data.get('book_title', 'Not provided')}
+            - Book Genre: {request.data.get('book_genre', 'Not provided')}
+            
+            Cover Description:
+            {request.data.get('cover_description', 'No description provided')}
+            
+            The PDF file has been uploaded to the system and is available for review.
+            """
+            
+            # Send email
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                ['fuqureshi@gmail.com'],  # Replace with your recipient email
+                fail_silently=False,
+            )
+            
+            logger.info("Cover expert email sent successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to send cover expert email: {str(e)}")
+            # Don't raise the exception to avoid affecting the main request
 
+
+# The rest of your views remain unchanged...
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def user_books(request):
@@ -195,8 +252,6 @@ def admin_all_orders(request):
             "pdf_file": order.pdf_file.url if order.pdf_file else None,
             "cover_file": order.cover_file.url if order.cover_file else None,
             "cover_description": order.cover_description,
-            
-            
         })
 
     return Response({

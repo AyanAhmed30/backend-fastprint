@@ -3,6 +3,8 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include
 
+
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/users/', include('users.urls')),
@@ -19,7 +21,9 @@ urlpatterns = [
     path('api/', include('shipping.urls')),
     path('api/book/', include('book.urls')),
     path('api/', include('payment.urls')),
+ path('api/userprofiles/', include('userprofiles.urls')),
     path('api/book-shipping/', include('book_shipping.urls')),
+
 
 
 
