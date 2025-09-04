@@ -3,29 +3,52 @@ name: 🚀 Deploy Backend to EC2
 on:
   push:
     branches:
-      - main  # or your deployment branch
+      - main
 
 jobs:
   deploy:
-    name: Deploy FastPrint Backend
     runs-on: ubuntu-latest
 
     steps:
-      - name: ⬇️ Checkout code
+      # 1️⃣ Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 📦 Set up SSH key
+      # 2️⃣ Setup SSH access
+      - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: 🚀 Deploy to EC2 and Restart Docker
+      # 3️⃣ Ensure backend directory exists on EC2
+      - name: Create backend directory on EC2
+        run: |
+          ssh ubuntu@${{ secrets.EC2_HOST }} "mkdir -p ~/backend/backend-fastprint"
+
+      # 4️⃣ Sync backend code (excluding media/static for safety)
+      - name: Sync backend code
+        run: |
+          rsync -avz --exclude 'media' --exclude 'static' -e "ssh -o StrictHostKeyChecking=no" ./backend-fastprint/ ubuntu@${{ secrets.EC2_HOST }}:~/backend/backend-fastprint/
+
+      # 5️⃣ Install dependencies & restart backend
+      - name: Install dependencies & restart backend
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            cd ~/FastPrint  # path on EC2 where backend repo is cloned
-            git pull origin main
-            docker-compose down
-            docker-compose up -d --build
+            set -e
+            cd ~/backend/backend-fastprint
+            # Install Python dependencies
+            if [ -f requirements.txt ]; then
+              pip3 install -r requirements.txt
+            fi
+            # Run migrations if Django
+            if [ -d fastprint_backend ]; then
+              python3 manage.py migrate --noinput || true
+              python3 manage.py collectstatic --noinput || true
+            fi
+            # Restart PM2 backend
+            pm2 restart backend || pm2 start ./start_backend.sh --name backend
+            pm2 save
+            echo "✅ Backend deployed successfully!"
           EOF
