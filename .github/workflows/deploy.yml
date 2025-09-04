@@ -5,7 +5,6 @@ on:
     branches:
       - main
 
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -28,10 +27,12 @@ jobs:
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST }} "mkdir -p ~/backend/backend-fastprint"
 
-      # 4️⃣ Sync backend code (excluding media/static for safety)
+      # 4️⃣ Sync backend code (✅ FIXED PATH ISSUE)
       - name: Sync backend code
         run: |
-          rsync -avz --exclude 'media' --exclude 'static' -e "ssh -o StrictHostKeyChecking=no" ./backend-fastprint/ ubuntu@${{ secrets.EC2_HOST }}:~/backend/backend-fastprint/
+          rsync -avz --exclude 'media' --exclude 'static' \
+            -e "ssh -o StrictHostKeyChecking=no" ./ \
+            ubuntu@${{ secrets.EC2_HOST }}:~/backend/backend-fastprint/
 
       # 5️⃣ Install dependencies & restart backend
       - name: Install dependencies & restart backend
@@ -39,16 +40,19 @@ jobs:
           ssh ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
             set -e
             cd ~/backend/backend-fastprint
-            # Install Python dependencies
+
+            # ✅ Install Python dependencies if requirements.txt exists
             if [ -f requirements.txt ]; then
               pip3 install -r requirements.txt
             fi
-            # Run migrations if Django
+
+            # ✅ Run Django migrations & collectstatic (optional, skip if not Django)
             if [ -d fastprint_backend ]; then
               python3 manage.py migrate --noinput || true
               python3 manage.py collectstatic --noinput || true
             fi
-            # Restart PM2 backend
+
+            # ✅ Restart backend with PM2
             pm2 restart backend || pm2 start ./start_backend.sh --name backend
             pm2 save
             echo "✅ Backend deployed successfully!"
