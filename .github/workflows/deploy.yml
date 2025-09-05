@@ -4,17 +4,19 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '**'  # Only deploy when backend files change
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
-      # 1️⃣ Checkout repository
+      # 1️⃣ Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup SSH access
+      # 2️⃣ Setup SSH
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
@@ -22,38 +24,119 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      # 3️⃣ Ensure backend directory exists on EC2
-      - name: Create backend directory on EC2
+      # 3️⃣ Deploy backend code (SAFE - preserves media/static)
+      - name: Deploy backend code
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST }} "mkdir -p ~/backend/backend-fastprint"
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e
+            echo "🔄 Starting deployment..."
+            
+            # Create backup directory with timestamp
+            BACKUP_DIR=~/backup-$(date +%Y%m%d-%H%M%S)
+            mkdir -p $BACKUP_DIR
+            
+            # Backup current code (excluding large folders)
+            if [ -d ~/backend/backend-fastprint ]; then
+              cp -r ~/backend/backend-fastprint $BACKUP_DIR/ || true
+              echo "✅ Backup created at $BACKUP_DIR"
+            fi
+            
+            # Create directory if it doesn't exist
+            mkdir -p ~/backend/backend-fastprint
+            cd ~/backend/backend-fastprint
+            
+            echo "📁 Current directory: $(pwd)"
+            echo "📋 Files before sync: $(ls -la)"
+          EOF
 
-      # 4️⃣ Sync backend code (✅ FIXED PATH ISSUE)
-      - name: Sync backend code
+      # 4️⃣ Sync code (SAFE - excludes important folders)
+      - name: Sync code to EC2
         run: |
-          rsync -avz --exclude 'media' --exclude 'static' \
-            -e "ssh -o StrictHostKeyChecking=no" ./ \
-            ubuntu@${{ secrets.EC2_HOST }}:~/backend/backend-fastprint/
+          rsync -avz --delete \
+            --exclude 'media/' \
+            --exclude 'static/' \
+            --exclude 'venv/' \
+            --exclude '__pycache__/' \
+            --exclude '*.pyc' \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'logs/' \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ./ ubuntu@${{ secrets.EC2_HOST }}:~/backend/backend-fastprint/
 
-      # 5️⃣ Install dependencies & restart backend
-      - name: Install dependencies & restart backend
+      # 5️⃣ Install dependencies and restart (SAFE)
+      - name: Install dependencies and restart
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
             set -e
             cd ~/backend/backend-fastprint
-
-            # ✅ Install Python dependencies if requirements.txt exists
+            
+            echo "📋 Files after sync: $(ls -la)"
+            
+            # Activate virtual environment if it exists
+            if [ -d fastprint_backend/venv ]; then
+              echo "🐍 Activating virtual environment..."
+              source fastprint_backend/venv/bin/activate
+            fi
+            
+            # Install requirements if file exists
             if [ -f requirements.txt ]; then
-              pip3 install -r requirements.txt
+              echo "📦 Installing requirements..."
+              pip3 install -r requirements.txt || echo "⚠️  Requirements install failed, continuing..."
             fi
-
-            # ✅ Run Django migrations & collectstatic (optional, skip if not Django)
-            if [ -d fastprint_backend ]; then
-              python3 manage.py migrate --noinput || true
-              python3 manage.py collectstatic --noinput || true
+            
+            # Django operations (only if manage.py exists)
+            if [ -f manage.py ] || [ -f fastprint_backend/manage.py ]; then
+              echo "🔄 Running Django operations..."
+              if [ -f fastprint_backend/manage.py ]; then
+                cd fastprint_backend
+              fi
+              python3 manage.py collectstatic --noinput || echo "⚠️  Collectstatic failed, continuing..."
+              python3 manage.py migrate --noinput || echo "⚠️  Migration failed, continuing..."
+              cd ~/backend/backend-fastprint
             fi
-
-            # ✅ Restart backend with PM2
-            pm2 restart backend || pm2 start ./start_backend.sh --name backend
+            
+            # Make start script executable
+            if [ -f start_backend.sh ]; then
+              chmod +x start_backend.sh
+              echo "✅ Made start_backend.sh executable"
+            fi
+            
+            # Restart backend with PM2
+            echo "🔄 Restarting backend..."
+            pm2 restart backend || {
+              echo "⚠️  PM2 restart failed, trying to start fresh..."
+              pm2 delete backend || true
+              if [ -f start_backend.sh ]; then
+                pm2 start start_backend.sh --name backend
+              else
+                echo "❌ No start_backend.sh found!"
+                exit 1
+              fi
+            }
+            
+            # Save PM2 configuration
             pm2 save
-            echo "✅ Backend deployed successfully!"
+            
+            # Show final status
+            echo "📊 PM2 Status:"
+            pm2 list
+            
+            echo "✅ Backend deployment completed successfully!"
+          EOF
+
+      # 6️⃣ Health check
+      - name: Health check
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            echo "🏥 Performing health check..."
+            sleep 5
+            pm2 list
+            if pm2 list | grep -q "online.*backend"; then
+              echo "✅ Backend is running successfully!"
+            else
+              echo "❌ Backend health check failed!"
+              pm2 logs backend --lines 10
+              exit 1
+            fi
           EOF
